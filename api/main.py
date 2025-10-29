@@ -19,7 +19,8 @@ from psycopg2.extras import RealDictCursor
 import os  # to access the DATABASE_URL from Vercel
 
 # Database connection
-
+conn = psycopg2.connect( os.environ.get("DATABASE_URL") ) # must add database to project beforehand
+cur = conn.cursor()
 
 # Create table if not exists
 cur.execute("""
