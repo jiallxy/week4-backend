@@ -24,6 +24,16 @@ cur = conn.cursor()
 
 # Create table if not exists
 cur.execute("""
+CREATE TABLE IF NOT EXISTS items (
+    item_id SERIAL PRIMARY KEY,
+    item_name TEXT NOT NULL,
+    item_desc TEXT NOT NULL
+)
+""")
+conn.commit()
+
+# Create table if not exists
+cur.execute("""
 CREATE TABLE IF NOT EXISTS urls (
     shortCode TEXT PRIMARY KEY,
     longUrl TEXT NOT NULL,
@@ -32,6 +42,15 @@ CREATE TABLE IF NOT EXISTS urls (
 """)
 conn.commit()
 
+# Create table if does not exist already
+cur.execute("""
+CREATE TABLE IF NOT EXISTS appointments (
+    appt_id SERIAL PRIMARY KEY,
+    appt_datetime TIMESTAMP NOT NULL,
+    appt_desc TEXT NOT NULL
+);
+""")
+conn.commit()
 
 # Initialize the FastAPI application
 app = FastAPI(
@@ -124,4 +143,31 @@ def get_long_url(shortCode):
 # 2. Make sure you have a database connected to the Vercel project
 # 3. Test by using your-vercel-backend-url/docs
 # 4. Later call from front-end using JavaScript fetch()
-    
+    # this GET route selects all the records from a database table
+@app.get("/appointments")
+def get_appointments():
+    """
+    GET all records from database table
+    """
+    cur = conn.cursor(cursor_factory=RealDictCursor)  # return result as JSON
+    cur.execute("SELECT * FROM appointments ORDER BY appt_datetime")
+    data = cur.fetchall()
+    return data    
+
+
+# this POST route inserts a new record in a database table
+@app.post("/appointment")
+def save_new_appointment( new_appt_datetime = Body(...), new_appt_desc = Body(...) ):    
+    """
+    POST a record to database table
+    """
+    cur.execute("INSERT INTO appointments (appt_datetime,appt_desc) VALUES (%s,%s)", (new_appt_datetime,new_appt_desc) ) 
+    conn.commit()
+    return {"success": True, "message": "new record added"}
+
+
+# Usage notes:
+# 1. Put this code in api/main.py and deploy as a Vercel project
+# 2. Make sure you have a database connected to the Vercel project
+# 3. Test by using your-vercel-backend-url/docs
+# 4. Later call from front-end using JavaScript fetch()
