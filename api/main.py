@@ -10,24 +10,24 @@ from fastapi import FastAPI, Body
 # which client urls are allowed 
 # to send requests to this backend code.
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
-# this library allows Python to speak with Postgres
-# and to return database query results in JSON format
+import hashlib  # used to generate a unique hash value for the short code
+import os        # to access the DATABASE_URL from Vercel
+
 import psycopg2
-from psycopg2.extras import RealDictCursor
-
-import os  # to access the DATABASE_URL from Vercel
+from psycopg2.extras import RealDictCursor  # to return response as json objects
 
 # Database connection
-conn = psycopg2.connect( os.environ.get("DATABASE_URL") ) # must add database to project beforehand
+conn = psycopg2.connect( os.environ.get("DATABASE_URL") )
 cur = conn.cursor()
 
 # Create table if not exists
 cur.execute("""
-CREATE TABLE IF NOT EXISTS items (
-    item_id SERIAL PRIMARY KEY,
-    item_name TEXT NOT NULL,
-    item_desc TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS urls (
+    shortCode TEXT PRIMARY KEY,
+    longUrl TEXT NOT NULL,
+    urlDesc TEXT NOT NULL
 )
 """)
 conn.commit()
@@ -45,19 +45,14 @@ app.add_middleware(
     allow_origins=["*"],  # can have your front-end url to secure API use
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"], 
 )
 
-
-# Route Definitions
-
+# Route (or Endpoint) Definitions
 # default route
-@app.get("/")           #endpoint, or route, always starts with a forward slash
-def default_route():    #route handler function
-    """
-    This is the default endpoint for this back-end.
-    """
-    return "You have reached the default route. Back-end server is listening..."
+@app.get("/")
+def root():
+    return {"message": "backend server with database is running"}
 
 
 # other routes go here, possibly including 
@@ -92,3 +87,41 @@ def insert_new_item_record(new_item_name = Body(...), new_item_desc = Body(...),
 # 2. Make sure you have a database connected to the Vercel project
 # 3. Test by using your-vercel-backend-url/docs
 # 4. Later call from front-end using JavaScript fetch()
+# create a short url
+@app.post("/shorten")
+def shorten_url(longUrl = Body(...), urlDesc = Body(...)):
+    shortCode = hashlib.md5(longUrl.encode()).hexdigest()[:10]  
+    cur.execute("INSERT INTO urls (shortCode, longUrl, urlDesc) VALUES (%s, %s, %s)", (shortCode, longUrl, urlDesc))
+    conn.commit()
+    return {"shortCode": shortCode}
+
+
+# get all short urls
+# this GET route needs to be first
+@app.get("/urls")
+def get_all_urls():
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM urls")
+    data = cur.fetchall()
+    return data    
+
+# re-direct the short url to the original long one
+@app.get("/{shortCode}")
+def get_long_url(shortCode):
+    cur.execute("SELECT longUrl,urlDesc FROM urls WHERE shortCode = %s", (shortCode,))
+    result = cur.fetchone()
+
+    # print(f">>>>>>>>> got from db: {result[0]} {result[1]}")
+
+    if result:
+        return RedirectResponse(url=result[0]) #{ "longUrl": result[0], "urlDesc": result[1] }
+    return {"error": "URL not found"}
+
+
+
+# Usage notes:
+# 1. Put this code in api/main.py and deploy as a Vercel project
+# 2. Make sure you have a database connected to the Vercel project
+# 3. Test by using your-vercel-backend-url/docs
+# 4. Later call from front-end using JavaScript fetch()
+    
